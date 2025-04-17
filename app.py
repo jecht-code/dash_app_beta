@@ -19,7 +19,16 @@ app.layout = html.Div([
         # Data table
         dash_table.DataTable(
             id='datatable',
-            columns=[{"name": i, "id": i, "editable": True} for i in df.columns],
+            columns=[
+                {"name": i, "id": i, "editable": True} 
+                if i != 'Activity' 
+                else {
+                    "name": i, 
+                    "id": i, 
+                    "presentation": "dropdown"
+                } 
+                for i in df.columns
+            ],
             data=df.to_dict('records'),
             editable=True,
             row_deletable=True,
@@ -46,6 +55,32 @@ app.layout = html.Div([
                 'whiteSpace': 'normal',
                 'height': 'auto'
             },
+            style_data_conditional=[
+                {
+                    'if': {
+                        'filter_query': '{Activity} eq "Active"',
+                        'column_id': 'Activity'
+                    },
+                    'backgroundColor': '#90EE90',  # Light green
+                    'color': 'black'
+                },
+                {
+                    'if': {
+                        'filter_query': '{Activity} eq "Non-Active"',
+                        'column_id': 'Activity'
+                    },
+                    'backgroundColor': '#FFB6C1',  # Light pink
+                    'color': 'black'
+                }
+            ],
+            dropdown={
+                'Activity': {
+                    'options': [
+                        {'label': 'Active', 'value': 'Active'},
+                        {'label': 'Non-Active', 'value': 'Non-Active'}
+                    ]
+                }
+            },
             page_size=10  # Show 10 rows per page
         ),
     ], style={'margin': '20px'}),
@@ -62,17 +97,34 @@ app.layout = html.Div([
     html.Div(id='status-message', style={'textAlign': 'center', 'margin': '20px'})
 ])
 
-# Callback to add new row
+# Combined callback for both adding rows and updating activity
 @app.callback(
     Output('datatable', 'data'),
     Input('add-row-button', 'n_clicks'),
+    Input('datatable', 'data_timestamp'),
     State('datatable', 'data'),
-    State('datatable', 'columns')
+    State('datatable', 'columns'),
+    State('datatable', 'active_cell'),
+    prevent_initial_call=True
 )
-def add_row(n_clicks, rows, columns):
-    if n_clicks > 0:
-        rows.append({c['id']: '' for c in columns})
-    return rows
+def update_table(add_clicks, timestamp, data, columns, active_cell):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return data
+    
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if trigger_id == 'add-row-button':
+        if add_clicks > 0:
+            new_row = {c['id']: '' for c in columns}
+            new_row['Activity'] = 'Non-Active'  # Default to Non-Active for new rows
+            data.append(new_row)
+    elif trigger_id == 'datatable' and active_cell and active_cell['column_id'] == 'Activity':
+        row = active_cell['row']
+        current_value = data[row]['Activity']
+        data[row]['Activity'] = 'Active' if current_value == 'Non-Active' else 'Non-Active'
+    
+    return data
 
 # Callback to save changes
 @app.callback(
@@ -93,4 +145,4 @@ def save_changes(n_clicks, data):
     return ''
 
 if __name__ == '__main__':
-    app.run(debug=True) 
+    app.run(debug=True)
